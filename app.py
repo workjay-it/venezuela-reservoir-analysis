@@ -1,6 +1,8 @@
 import streamlit as st
 import duckdb
 from pathlib import Path
+import plotly.express as px
+
 
 BASE_DIR = Path(__file__).resolve().parent
 
@@ -53,6 +55,45 @@ c1, c2, c3 = st.columns(3)
 c1.metric("Reservoirs", len(df))
 c2.metric("Total Proven Reserves (BBB)", round(df.proven_reserves_bbb.sum(), 2))
 c3.metric("Total Production (BPD)", int(df.production_capacity_bpd.sum()))
+
+st.markdown("---")
+st.subheader("📊 Proven Reserves by Location")
+
+reserves_by_location = (
+    df.groupby("location", as_index=False)
+      .agg(total_proven_reserves=("proven_reserves_bbb", "sum"))
+)
+
+fig_bar = px.bar(
+    reserves_by_location,
+    x="location",
+    y="total_proven_reserves",
+    title="Total Proven Reserves by Location",
+    labels={
+        "total_proven_reserves": "Proven Reserves (Billion Barrels)",
+        "location": "Location"
+    }
+)
+
+st.plotly_chart(fig_bar, use_container_width=True)
+
+st.subheader("📈 Production Capacity vs Proven Reserves")
+
+fig_scatter = px.scatter(
+    df,
+    x="proven_reserves_bbb",
+    y="production_capacity_bpd",
+    size="recoverable_reserves_bbb",
+    color="location",
+    title="Production Capacity vs Proven Reserves",
+    labels={
+        "proven_reserves_bbb": "Proven Reserves (Billion Barrels)",
+        "production_capacity_bpd": "Production Capacity (BPD)"
+    }
+)
+
+st.plotly_chart(fig_scatter, use_container_width=True)
+
 
 st.subheader("Strategic Ranking")
 st.dataframe(
