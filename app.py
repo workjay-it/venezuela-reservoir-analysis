@@ -3,20 +3,45 @@ import duckdb
 from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent
-con = duckdb.connect(BASE_DIR / "db" / "reservoir.duckdb")
+
+# In-memory DuckDB
+con = duckdb.connect()
+
+csv_path = BASE_DIR / "data" / "Reservoir_venezuela.csv"
+
+con.execute(f"""
+CREATE TABLE IF NOT EXISTS reservoirs_clean AS
+SELECT
+    Location AS location,
+    CASE
+        WHEN CAST(Year_Discovered AS VARCHAR) LIKE '%s' THEN
+            CAST(SUBSTR(CAST(Year_Discovered AS VARCHAR), 1, 4) AS INTEGER) + 5
+        ELSE
+            CAST(Year_Discovered AS INTEGER)
+    END AS year_discovered,
+    CAST(REPLACE(CAST(Proven_Reserves_Billion_Barrels AS VARCHAR), ',', '') AS DOUBLE) AS proven_reserves_bbb,
+    CASE
+        WHEN CAST(Estimated_Recoverable_Reserves_Billion_Barrels AS VARCHAR) LIKE '%-%' THEN
+            (
+                CAST(SPLIT_PART(REPLACE(CAST(Estimated_Recoverable_Reserves_Billion_Barrels AS VARCHAR), ',', ''), '-', 1) AS DOUBLE)
+                +
+                CAST(SPLIT_PART(REPLACE(CAST(Estimated_Recoverable_Reserves_Billion_Barrels AS VARCHAR), ',', ''), '-', 2) AS DOUBLE)
+            ) / 2
+        ELSE
+            CAST(REPLACE(CAST(Estimated_Recoverable_Reserves_Billion_Barrels AS VARCHAR), ',', '') AS DOUBLE)
+    END AS recoverable_reserves_bbb,
+    CAST(REPLACE(CAST(Production_Capacity_Barrels_Day AS VARCHAR), ',', '') AS BIGINT) AS production_capacity_bpd
+FROM read_csv_auto('{csv_path}');
+""")
 
 st.set_page_config(page_title="Venezuela Reservoir Analysis", layout="wide")
-
 st.title("🛢️ Venezuela Reservoir Analytics Dashboard")
 
-# Sidebar filter
 locations = con.execute(
     "SELECT DISTINCT location FROM reservoirs_clean ORDER BY location"
 ).df()["location"]
 
-selected_location = st.sidebar.selectbox(
-    "Select Location", ["All"] + list(locations)
-)
+selected_location = st.sidebar.selectbox("Select Location", ["All"] + list(locations))
 
 query = "SELECT * FROM reservoirs_clean"
 if selected_location != "All":
@@ -24,7 +49,6 @@ if selected_location != "All":
 
 df = con.execute(query).df()
 
-# KPIs
 c1, c2, c3 = st.columns(3)
 c1.metric("Reservoirs", len(df))
 c2.metric("Total Proven Reserves (BBB)", round(df.proven_reserves_bbb.sum(), 2))
