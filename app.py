@@ -39,6 +39,17 @@ FROM read_csv_auto('{csv_path}');
 st.set_page_config(page_title="Venezuela Reservoir Analysis", layout="wide")
 st.title("🛢️ Venezuela Reservoir Analytics Dashboard")
 
+#Sidebar
+if st.sidebar.button("🔄 Refresh Data"):
+    st.cache_data.clear()
+    st.rerun()
+st.sidebar.header("🔎 Filters")
+st.sidebar.markdown(
+    "Use the dropdown below to explore reservoir data by location."
+)
+
+
+
 locations = con.execute(
     "SELECT DISTINCT location FROM reservoirs_clean ORDER BY location"
 ).df()["location"]
@@ -50,6 +61,14 @@ if selected_location != "All":
     query += f" WHERE location = '{selected_location}'"
 
 df = con.execute(query).df()
+
+#For CSV Button:
+st.download_button(
+    label="⬇️ Download Filtered Data (CSV)",
+    data=df.to_csv(index=False),
+    file_name="venezuela_reservoirs_filtered.csv",
+    mime="text/csv"
+)
 
 c1, c2, c3 = st.columns(3)
 c1.metric("Reservoirs", len(df))
@@ -94,6 +113,30 @@ fig_scatter = px.scatter(
 
 st.plotly_chart(fig_scatter, use_container_width=True)
 
+#Time-trend chart:
+st.markdown("---")
+st.subheader("📅 Reservoir Discoveries Over Time")
+
+discoveries_by_year = (
+    df.groupby("year_discovered", as_index=False)
+      .size()
+      .rename(columns={"size": "reservoir_count"})
+)
+
+fig_time = px.line(
+    discoveries_by_year,
+    x="year_discovered",
+    y="reservoir_count",
+    markers=True,
+    title="Number of Reservoir Discoveries by Year",
+    labels={
+        "year_discovered": "Year Discovered",
+        "reservoir_count": "Number of Reservoirs"
+    }
+)
+
+st.plotly_chart(fig_time, use_container_width=True)
+
 
 st.subheader("Strategic Ranking")
 st.dataframe(
@@ -102,5 +145,5 @@ st.dataframe(
         df.proven_reserves_bbb * 0.4 +
         df.recoverable_reserves_bbb * 0.4 +
         df.production_capacity_bpd / 100000 * 0.2
-    ).sort_values("strategic_score", ascending=False)
+    )
 )
